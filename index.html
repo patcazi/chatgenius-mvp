@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Chatgenie Client Test</title>
+  </head>
+  <body>
+    <h1>Chatgenie Client Test</h1>
+    <p id="status">Not connected yet...</p>
+
+    <!-- Chat section -->
+    <input id="messageInput" type="text" placeholder="Type a message..." />
+    <div id="chatLog"></div>
+
+    <!-- Login Test section -->
+    <h2>Login Test</h2>
+    <input id="loginUsername" type="text" placeholder="Username" />
+    <input id="loginPassword" type="password" placeholder="Password" />
+    <button id="loginButton">Login</button>
+    <div id="loginResult"></div>
+
+    <!-- Channels section -->
+    <h3>Channels</h3>
+    <input id="channelInput" type="text" placeholder="Channel name..." />
+    <button id="joinChannelBtn">Join Channel</button>
+    <p id="channelStatus"></p>
+
+    <!-- Presence: who is online -->
+    <h3>Online Users</h3>
+    <ul id="onlineUsersList"></ul>
+
+    <!-- Load the Socket.IO client script -->
+    <script src="/socket.io/socket.io.js"></script>
+
+    <script>
+      // Store the current user info and current room
+      let currentUser = null;
+      let currentRoom = null;
+
+      // ----- Socket.IO Chat Setup -----
+      // Connect to our server via Socket.IO
+      const socket = io();
+
+      // Show status when connected
+      socket.on('connect', () => {
+        document.getElementById('status').innerText = 'Connected!';
+      });
+
+      // Listen for room-specific messages
+      socket.on('roomMessage', (data) => {
+        // data = { room, username, text }
+        console.log('Received roomMessage:', data);
+
+        const chatLog = document.getElementById('chatLog');
+        const p = document.createElement('p');
+        // Show which room the message came from
+        p.textContent = `[${data.room}] ${data.username}: ${data.text}`;
+        chatLog.appendChild(p);
+      });
+
+      // Allow sending a message on Enter key
+      const messageInput = document.getElementById('messageInput');
+      messageInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          if (!currentRoom) {
+            alert('Please join a channel first!');
+            return;
+          }
+          // Build a message object that includes the room, username, text
+          const msgObject = {
+            room: currentRoom,
+            username: currentUser?.username || 'Guest',
+            text: messageInput.value
+          };
+
+          // Send via "sendRoomMessage" to the server
+          socket.emit('sendRoomMessage', msgObject);
+          messageInput.value = '';
+        }
+      });
+
+      // ----- Simple Login Test -----
+      const loginBtn = document.getElementById('loginButton');
+      loginBtn.addEventListener('click', async () => {
+        const username = document.getElementById('loginUsername').value;
+        const password = document.getElementById('loginPassword').value;
+        const resultDiv = document.getElementById('loginResult');
+
+        // Show loading message
+        resultDiv.textContent = 'Logging in...';
+
+        try {
+          const response = await fetch('/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
+          });
+          const data = await response.json();
+
+          if (response.ok) {
+            // Store user info in currentUser
+            currentUser = {
+              username: username,
+              token: data.token
+            };
+
+            resultDiv.textContent = `Login success! Token: ${data.token}`;
+
+            // Tell the server our username for presence
+            socket.emit('setUsername', username);
+          } else {
+            resultDiv.textContent = `Error: ${data.error || 'Unknown error'}`;
+          }
+        } catch (err) {
+          resultDiv.textContent = `Unexpected error: ${err.message}`;
+        }
+      });
+
+      // ----- Channels -----
+      const channelInput = document.getElementById('channelInput');
+      const joinChannelBtn = document.getElementById('joinChannelBtn');
+      const channelStatus = document.getElementById('channelStatus');
+
+      joinChannelBtn.addEventListener('click', () => {
+        const roomName = channelInput.value.trim();
+        if (!roomName) {
+          alert('Please enter a channel name');
+          return;
+        }
+
+        // Emit "joinRoom" to the server
+        socket.emit('joinRoom', roomName);
+        currentRoom = roomName; // Store it globally so we know where to send messages
+        channelStatus.textContent = `Joined channel: ${roomName}`;
+      });
+
+      // ----- Presence: listen for "onlineUsers" -----
+      socket.on('onlineUsers', (usernames) => {
+        console.log('onlineUsers event received:', usernames);
+
+        const onlineList = document.getElementById('onlineUsersList');
+        onlineList.innerHTML = ''; // Clear old list
+
+        // For each username, create an <li>
+        usernames.forEach((name) => {
+          const li = document.createElement('li');
+          li.textContent = name;
+          onlineList.appendChild(li);
+        });
+      });
+    </script>
+  </body>
+</html>
+
+
+
