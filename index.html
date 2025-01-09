@@ -4,193 +4,675 @@
     <meta charset="UTF-8" />
     <title>Chatgenie Client</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/emoji-picker-element@1.18.3/index.css">
+    <style>
+      :root {
+        --sidebar-width: 260px;
+        --slack-purple: #611f69;
+        --slack-border: #dddddd;
+        --slack-hover: rgba(255, 255, 255, 0.1);
+        --slack-active: rgba(255, 255, 255, 0.2);
+        --slack-text: #1d1c1d;
+        --slack-channel: #1164a3;
+      }
+
+      body {
+        overflow: hidden;
+        height: 100vh;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      }
+
+      /* Sidebar styles */
+      .sidebar {
+        width: var(--sidebar-width);
+        height: 100vh;
+        position: fixed;
+        left: 0;
+        top: 0;
+        background: var(--slack-purple);
+        color: white;
+        padding: 0;
+        overflow-y: auto;
+      }
+
+      .workspace-header {
+        padding: 16px;
+        height: 64px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .workspace-header h2 {
+        font-size: 18px;
+        font-weight: 900;
+        margin: 0;
+      }
+
+      .workspace-header .presence {
+        width: 8px;
+        height: 8px;
+        background: #2bac76;
+        border-radius: 50%;
+        margin-right: 4px;
+      }
+
+      .sidebar-section {
+        padding: 16px;
+      }
+
+      .sidebar h3 {
+        color: #ffffff;
+        font-size: 13px;
+        margin-bottom: 8px;
+        opacity: 0.8;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+      }
+
+      .sidebar ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .sidebar li {
+        padding: 4px 16px;
+        margin: 2px -16px;
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 15px;
+      }
+
+      .sidebar li:hover {
+        background: var(--slack-hover);
+      }
+
+      .sidebar li.active {
+        background: var(--slack-active);
+        color: white;
+      }
+
+      .sidebar li i {
+        margin-right: 8px;
+        font-size: 16px;
+      }
+
+      .add-channel-btn {
+        color: rgba(255, 255, 255, 0.8);
+        background: none;
+        border: none;
+        padding: 4px 16px;
+        margin: 2px -16px;
+        width: 100%;
+        text-align: left;
+        font-size: 15px;
+        cursor: pointer;
+      }
+
+      .add-channel-btn:hover {
+        background: var(--slack-hover);
+        color: white;
+      }
+
+      /* Main content area */
+      .main-content {
+        margin-left: var(--sidebar-width);
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Header */
+      .chat-header {
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--slack-border);
+        background: white;
+        height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .chat-header h4 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 900;
+        color: var(--slack-text);
+      }
+
+      .chat-header .channel-info {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .chat-header .channel-name {
+        color: var(--slack-channel);
+        font-weight: 900;
+      }
+
+      /* Chat area */
+      .chat-area {
+        flex-grow: 1;
+        overflow-y: auto;
+        padding: 24px;
+        background: white;
+      }
+
+      .message {
+        display: flex;
+        margin-bottom: 8px;
+        padding: 4px 0;
+      }
+
+      .message:hover {
+        background: #f8f9fa;
+      }
+
+      .message-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 4px;
+        background: var(--slack-purple);
+        margin-right: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        color: white;
+        flex-shrink: 0;
+      }
+
+      .message-content {
+        flex-grow: 1;
+        min-width: 0;
+      }
+
+      .message-header {
+        margin-bottom: 4px;
+      }
+
+      .message-header strong {
+        font-weight: 900;
+        color: var(--slack-text);
+      }
+
+      .message-text {
+        color: var(--slack-text);
+        line-height: 1.46668;
+        font-size: 15px;
+        margin-bottom: 4px;
+      }
+
+      .message-actions {
+        display: none;
+        gap: 4px;
+        margin-top: 4px;
+      }
+
+      .message:hover .message-actions {
+        display: flex;
+      }
+
+      .message-action {
+        padding: 4px 8px;
+        border-radius: 4px;
+        background: white;
+        border: 1px solid var(--slack-border);
+        color: #616061;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .message-action:hover {
+        background: #f8f9fa;
+      }
+
+      .message-reactions {
+        display: flex;
+        gap: 4px;
+        margin-top: 4px;
+      }
+
+      .reaction {
+        padding: 2px 6px;
+        border-radius: 12px;
+        background: #f8f9fa;
+        border: 1px solid var(--slack-border);
+        color: #616061;
+        font-size: 12px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .reaction:hover {
+        background: #ebedef;
+      }
+
+      .reaction.active {
+        background: #e8f5fa;
+        border-color: #1264a3;
+        color: #1264a3;
+      }
+
+      /* Message input area */
+      .message-input-container {
+        padding: 16px 24px 24px;
+        border-top: 1px solid var(--slack-border);
+        background: white;
+      }
+
+      .message-input {
+        border: 1px solid var(--slack-border);
+        border-radius: 4px;
+        min-height: 44px;
+        padding: 9px 12px;
+        font-size: 15px;
+        line-height: 1.46668;
+      }
+
+      .message-input:focus {
+        border-color: var(--slack-channel);
+        box-shadow: 0 0 0 1px var(--slack-channel);
+      }
+
+      /* Thread Panel */
+      .thread-panel {
+        position: fixed;
+        right: 0;
+        top: 0;
+        width: 400px;
+        height: 100vh;
+        background: white;
+        border-left: 1px solid var(--slack-border);
+        display: none;
+        flex-direction: column;
+      }
+
+      .thread-panel.active {
+        display: flex;
+      }
+
+      .thread-header {
+        padding: 16px;
+        border-bottom: 1px solid var(--slack-border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .thread-close {
+        background: none;
+        border: none;
+        color: #616061;
+        cursor: pointer;
+        padding: 4px;
+      }
+
+      .thread-close:hover {
+        color: var(--slack-text);
+      }
+
+      /* Auth container */
+      .auth-container {
+        max-width: 800px;
+        margin: 48px auto;
+        padding: 0 24px;
+      }
+
+      .auth-container h1 {
+        color: var(--slack-purple);
+        font-weight: 900;
+        margin-bottom: 32px;
+      }
+
+      .card {
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        border: none;
+      }
+
+      .card-title {
+        font-weight: 700;
+        color: var(--slack-text);
+      }
+
+      .form-control {
+        border-radius: 4px;
+        border: 1px solid var(--slack-border);
+        padding: 11px 12px;
+        font-size: 15px;
+      }
+
+      .form-control:focus {
+        border-color: var(--slack-channel);
+        box-shadow: 0 0 0 1px var(--slack-channel);
+      }
+
+      .btn-primary {
+        background: var(--slack-purple);
+        border: none;
+        font-weight: 700;
+        padding: 11px 12px;
+      }
+
+      .btn-primary:hover {
+        background: #4a154b;
+      }
+
+      /* Emoji picker styles */
+      .emoji-picker-container {
+        position: relative;
+      }
+
+      emoji-picker {
+        position: absolute;
+        bottom: 100%;
+        right: 0;
+        margin-bottom: 8px;
+        display: none;
+        z-index: 1000;
+      }
+
+      .emoji-picker-container.active emoji-picker {
+        display: block;
+      }
+
+      .emoji-trigger {
+        background: none;
+        border: none;
+        color: #616061;
+        padding: 6px 12px;
+        cursor: pointer;
+        font-size: 20px;
+      }
+
+      .emoji-trigger:hover {
+        color: var(--slack-text);
+      }
+
+      /* Adjust input group for emoji button */
+      .message-input-group {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .message-input-wrapper {
+        flex-grow: 1;
+        position: relative;
+      }
+
+      .private-message {
+        background-color: #f8f4ff;
+      }
+
+      .private-message:hover {
+        background-color: #f0ebff;
+      }
+
+      .badge {
+        font-size: 0.75em;
+        padding: 0.25em 0.5em;
+      }
+    </style>
   </head>
-  <body class="bg-light">
-    <div class="container py-5">
-      <h1 class="text-center mb-4">Chatgenie Client</h1>
-      <p id="status" class="text-danger text-center">Not connected</p>
-
-      <!-- Chat Section -->
-      <div class="card mb-4">
-        <div class="card-body">
-          <h2>Chat</h2>
-          <div id="chatLog" class="border p-3 mb-3" style="height: 300px; overflow-y: auto;"></div>
-          <div class="input-group">
-            <input id="messageInput" type="text" class="form-control" placeholder="Type a message..." maxlength="1000" />
-            <button id="sendMessageBtn" class="btn btn-primary" disabled>Send</button>
-          </div>
-          <small class="text-muted">Maximum message length: 1000 characters</small>
-        </div>
-      </div>
-
-      <!-- Login Section -->
-      <div class="card mb-4" id="loginCard">
-        <div class="card-body">
-          <h2>Login</h2>
-          <form id="loginForm" novalidate>
-            <div class="mb-3">
-              <input id="loginUsername" type="text" class="form-control" placeholder="Username" required />
-              <div class="invalid-feedback">Username is required</div>
-            </div>
-            <div class="mb-3">
-              <input id="loginPassword" type="password" class="form-control" placeholder="Password" 
-                     minlength="8" required />
-              <div class="invalid-feedback">Password must be at least 8 characters</div>
-            </div>
-            <button id="loginButton" type="submit" class="btn btn-primary w-100">Login</button>
-          </form>
-          <div id="loginResult" class="alert mt-3" role="alert" style="display: none;"></div>
-        </div>
-      </div>
-
-      <!-- Channels Section -->
-      <div class="card mb-4">
-        <div class="card-body">
-          <h3>Channels</h3>
-          <div class="input-group mb-3">
-            <input id="channelInput" type="text" class="form-control" placeholder="Channel name..." />
-            <button id="joinChannelBtn" class="btn btn-success" disabled>Join Channel</button>
-          </div>
-          <p id="currentChannel" class="text-muted">Not in any channel</p>
-        </div>
-      </div>
-
-      <!-- Online Users -->
-      <div class="card mb-4">
-        <div class="card-body">
-          <h3>Online Users</h3>
-          <ul id="onlineUsersList" class="list-group"></ul>
-        </div>
-      </div>
-
-      <!-- Private Message Section -->
-      <div class="card mb-4">
-        <div class="card-body">
-          <h3>Private Messages</h3>
-          
-          <!-- Private Chat Interface (Hidden by default) -->
-          <div id="privateChatInterface" style="display: none;">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-              <h4 id="privateChatHeader" class="m-0">Chat with: </h4>
-              <button id="closePrivateChat" class="btn btn-sm btn-outline-secondary">Close Chat</button>
-            </div>
-            <div id="privateChatLog" class="border p-3 mb-3" style="height: 200px; overflow-y: auto;"></div>
-            <div class="input-group">
-              <input id="privateMessageInput" type="text" class="form-control" placeholder="Type private message..." maxlength="1000" />
-              <button id="sendPrivateMessageBtn" class="btn btn-primary">Send</button>
+  <body>
+    <!-- Before login, show only auth container -->
+    <div class="auth-container" id="authContainer">
+      <h1 class="text-center mb-4">Chatgenie</h1>
+      <div class="row">
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Register</h5>
+              <form id="registerForm">
+                <div class="mb-3">
+                  <input type="text" class="form-control" id="registerUsername" placeholder="Username" required>
+                </div>
+                <div class="mb-3">
+                  <input type="password" class="form-control" id="registerPassword" placeholder="Password" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Register</button>
+              </form>
             </div>
           </div>
-
-          <!-- Start New Private Chat Interface -->
-          <div id="startPrivateChatInterface">
-            <div class="input-group mb-3">
-              <input id="privateMessageUser" type="text" class="form-control" placeholder="Username to message..." />
-              <button id="startPrivateMessageBtn" class="btn btn-info" disabled>Start Chat</button>
-            </div>
-            <p id="privateMessageStatus" class="text-muted"></p>
-          </div>
         </div>
-      </div>
-
-      <!-- File Upload Section -->
-      <div class="card mb-4">
-        <div class="card-body">
-          <h3>File Upload</h3>
-          <form id="fileUploadForm">
-            <div class="mb-3">
-              <label for="fileInput" class="form-label">Upload File (Max 5MB):</label>
-              <input type="file" id="fileInput" class="form-control" accept="image/*,.pdf" />
-              <small class="text-muted d-block">Allowed types: Images, PDF</small>
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Login</h5>
+              <form id="loginForm">
+                <div class="mb-3">
+                  <input type="text" class="form-control" id="loginUsername" placeholder="Username" required>
+                </div>
+                <div class="mb-3">
+                  <input type="password" class="form-control" id="loginPassword" placeholder="Password" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Login</button>
+              </form>
             </div>
-            <button type="submit" class="btn btn-warning w-100" disabled>Upload</button>
-          </form>
-          <div id="uploadStatus" class="alert mt-3" style="display: none;"></div>
-          <div id="fileLinks" class="mt-4">
-            <h4>Uploaded Files:</h4>
-            <ul class="list-group" id="filesList"></ul>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- After login, show main chat interface -->
+    <div id="mainInterface" style="display: none;">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="workspace-header">
+          <h2>Chatgenie</h2>
+          <div style="display: flex; align-items: center;">
+            <div class="presence"></div>
+            <span id="currentUser"></span>
+          </div>
+        </div>
+        
+        <div class="sidebar-section">
+          <h3>Channels</h3>
+          <ul id="channelsList">
+            <!-- Channels will be listed here -->
+          </ul>
+          <button class="add-channel-btn" id="addChannelBtn">
+            <i class="bi bi-plus"></i> Add channel
+          </button>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Direct Messages</h3>
+          <ul id="onlineUsersList">
+            <!-- Online users will be listed here -->
+          </ul>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="main-content">
+        <!-- Chat Header -->
+        <div class="chat-header">
+          <div class="channel-info">
+            <h4>
+              <span id="currentChannel" class="channel-name">Not in any channel</span>
+            </h4>
+            <small id="status" class="text-danger">Not connected</small>
+          </div>
+          <div class="channel-actions">
+            <button class="btn btn-outline-secondary btn-sm" id="channelInfoBtn">
+              <i class="bi bi-info-circle"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Chat Messages Area -->
+        <div class="chat-area" id="chatLog">
+          <!-- Messages will appear here -->
+        </div>
+
+        <!-- Message Input -->
+        <div class="message-input-container">
+          <div class="message-input-group">
+            <div class="message-input-wrapper">
+              <div class="input-group">
+                <input
+                  id="messageInput"
+                  type="text"
+                  class="form-control message-input"
+                  placeholder="Message..."
+                  maxlength="1000"
+                />
+                <div class="emoji-picker-container">
+                  <button type="button" class="emoji-trigger" id="mainEmojiTrigger">
+                    <i class="bi bi-emoji-smile"></i>
+                  </button>
+                  <emoji-picker id="mainEmojiPicker"></emoji-picker>
+                </div>
+              </div>
+            </div>
+            <button id="sendMessageBtn" class="btn btn-primary" disabled>
+              <i class="bi bi-send"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Thread Panel -->
+      <div class="thread-panel" id="threadPanel">
+        <div class="thread-header">
+          <h4>Thread</h4>
+          <button class="thread-close" id="closeThread">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+        <div class="chat-area" id="threadLog"></div>
+        <div class="message-input-container">
+          <div class="message-input-group">
+            <div class="message-input-wrapper">
+              <div class="input-group">
+                <input
+                  id="threadInput"
+                  type="text"
+                  class="form-control message-input"
+                  placeholder="Reply in thread..."
+                  maxlength="1000"
+                />
+                <div class="emoji-picker-container">
+                  <button type="button" class="emoji-trigger" id="threadEmojiTrigger">
+                    <i class="bi bi-emoji-smile"></i>
+                  </button>
+                  <emoji-picker id="threadEmojiPicker"></emoji-picker>
+                </div>
+              </div>
+            </div>
+            <button id="sendThreadBtn" class="btn btn-primary">
+              <i class="bi bi-send"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add Channel Modal -->
+      <div class="modal fade" id="addChannelModal" tabindex="-1">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Create a channel</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <form id="addChannelForm">
+                <div class="mb-3">
+                  <label class="form-label">Channel name</label>
+                  <input type="text" class="form-control" id="channelName" required pattern="^[a-z0-9-_]+$">
+                  <small class="text-muted">Lowercase letters, numbers, hyphens and underscores only</small>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Description (optional)</label>
+                  <input type="text" class="form-control" id="channelDescription">
+                </div>
+                <button type="submit" class="btn btn-primary">Create Channel</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rest of your scripts... -->
+    <script type="module">
+      import 'https://cdn.jsdelivr.net/npm/emoji-picker-element@1.18.3/index.js';
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script>
-      // Global state
-      let currentUser = null;
-      let currentRoom = null;
-      let authToken = null;
-
-      // Socket.IO setup with auth
-      const socket = io({
-        auth: (cb) => {
-          cb({ token: authToken });
-        }
-      });
-
+      // Socket connection
+      const socket = io();
+      let currentUsername = '';
+      let activeThread = null;
+      let currentPrivateRoom = null;
+      let currentPrivateUser = null;
+      
       // DOM Elements
-      const statusEl = document.getElementById('status');
+      const loginForm = document.getElementById('loginForm');
+      const registerForm = document.getElementById('registerForm');
       const messageInput = document.getElementById('messageInput');
       const sendMessageBtn = document.getElementById('sendMessageBtn');
       const chatLog = document.getElementById('chatLog');
-      const loginForm = document.getElementById('loginForm');
-      const loginResult = document.getElementById('loginResult');
-      const channelInput = document.getElementById('channelInput');
-      const joinChannelBtn = document.getElementById('joinChannelBtn');
-      const currentChannelEl = document.getElementById('currentChannel');
-      const fileUploadForm = document.getElementById('fileUploadForm');
-      const uploadStatus = document.getElementById('uploadStatus');
-      const filesList = document.getElementById('filesList');
+      const status = document.getElementById('status');
+      const currentChannel = document.getElementById('currentChannel');
+      const channelsList = document.getElementById('channelsList');
+      const onlineUsersList = document.getElementById('onlineUsersList');
+      const addChannelBtn = document.getElementById('addChannelBtn');
+      const addChannelModal = new bootstrap.Modal(document.getElementById('addChannelModal'));
+      const addChannelForm = document.getElementById('addChannelForm');
+      const threadPanel = document.getElementById('threadPanel');
+      const threadLog = document.getElementById('threadLog');
+      const threadInput = document.getElementById('threadInput');
+      const sendThreadBtn = document.getElementById('sendThreadBtn');
+      const closeThread = document.getElementById('closeThread');
+      const currentUser = document.getElementById('currentUser');
 
-      // Socket connection handlers
-      socket.on('connect', () => {
-        statusEl.textContent = 'Connected';
-        statusEl.className = 'text-success text-center';
+      // Register form handler
+      registerForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = document.getElementById('registerUsername').value;
+        const password = document.getElementById('registerPassword').value;
         
-        // Restore session if we have auth token
-        if (authToken) {
-          socket.emit('setUsername', currentUser?.username);
+        try {
+          const response = await fetch('/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+          });
+
+          const data = await response.json();
+          if (response.ok) {
+            alert('Registration successful! Please login.');
+            document.getElementById('registerUsername').value = '';
+            document.getElementById('registerPassword').value = '';
+          } else {
+            alert(data.error || 'Registration failed. Please try again.');
+          }
+        } catch (error) {
+          console.error('Registration error:', error);
+          alert('Registration failed. Please try again.');
         }
       });
-
-      socket.on('disconnect', () => {
-        statusEl.textContent = 'Disconnected';
-        statusEl.className = 'text-danger text-center';
-      });
-
-      // Message display helper
-      function appendMessage(message, type = 'normal') {
-        const p = document.createElement('p');
-        p.textContent = message;
-        p.className = type === 'error' ? 'text-danger' : 'mb-1';
-        chatLog.appendChild(p);
-        chatLog.scrollTop = chatLog.scrollHeight;
-      }
-
-      // Show status helper
-      function showStatus(element, message, type) {
-        element.textContent = message;
-        element.className = `alert alert-${type}`;
-        element.style.display = 'block';
-        setTimeout(() => {
-          element.style.display = 'none';
-        }, 5000);
-      }
 
       // Login form handler
       loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        
-        const username = document.getElementById('loginUsername').value.trim();
+        const username = document.getElementById('loginUsername').value;
         const password = document.getElementById('loginPassword').value;
         
-        if (!username || !password) {
-          loginForm.classList.add('was-validated');
-          return;
-        }
-
-        const loginButton = document.getElementById('loginButton');
-        loginButton.disabled = true;
-
         try {
           const response = await fetch('/login', {
             method: 'POST',
@@ -199,246 +681,469 @@
           });
 
           const data = await response.json();
-
           if (response.ok) {
-            authToken = data.token;
-            currentUser = { username };
-            
-            showStatus(loginResult, 'Login successful!', 'success');
-            socket.emit('setUsername', username);
-            
-            // Enable features
-            joinChannelBtn.disabled = false;
-            fileUploadForm.querySelector('button').disabled = false;
-            
-            // Hide login form
-            document.getElementById('loginCard').style.display = 'none';
+            currentUsername = username;
+            currentUser.textContent = username;
+            showMainInterface();
+            socket.emit('login', username);
+            localStorage.setItem('token', data.token);
           } else {
-            showStatus(loginResult, `Error: ${data.error}`, 'danger');
+            alert(data.error || 'Login failed. Please try again.');
           }
-        } catch (err) {
-          showStatus(loginResult, `Error: ${err.message}`, 'danger');
-        } finally {
-          loginButton.disabled = false;
+        } catch (error) {
+          console.error('Login error:', error);
+          alert('Login failed. Please try again.');
         }
       });
 
-      // Message sending
-      messageInput.addEventListener('input', () => {
-        sendMessageBtn.disabled = !messageInput.value.trim() || !currentRoom;
+      // Socket event handlers
+      socket.on('connect', () => {
+        status.textContent = 'Connected';
+        status.className = 'text-success';
+        sendMessageBtn.disabled = false;
+      });
+
+      socket.on('disconnect', () => {
+        status.textContent = 'Disconnected';
+        status.className = 'text-danger';
+        sendMessageBtn.disabled = true;
+      });
+
+      socket.on('error', (error) => {
+        console.error('Socket error:', error);
+        alert(error.message || 'An error occurred');
+      });
+
+      socket.on('success', (data) => {
+        if (data.message) {
+          // If a channel was created, update the UI
+          if (data.channel) {
+            currentChannel.textContent = '#' + data.channel;
+            chatLog.innerHTML = '';
+            // Update active channel in sidebar
+            document.querySelectorAll('#channelsList li').forEach(li => {
+              li.className = li.textContent === '#' + data.channel ? 'active' : '';
+            });
+          }
+          // Don't show alert for channel creation
+          if (!data.channel) {
+            alert(data.message);
+          }
+        }
+      });
+
+      socket.on('privateMessageStarted', (data) => {
+        const { room, user } = data;
+        currentPrivateRoom = room;
+        currentPrivateUser = user;
+        
+        // Update UI to show private chat
+        currentChannel.textContent = `@${user}`;
+        chatLog.innerHTML = '';
+        
+        // Update channel list UI
+        document.querySelectorAll('#channelsList li').forEach(li => {
+          li.className = '';
+        });
+
+        // Add active class to the user in the DM list
+        document.querySelectorAll('#onlineUsersList li').forEach(li => {
+          if (li.textContent.includes(user)) {
+            li.className = 'active';
+          } else {
+            li.className = '';
+          }
+        });
+
+        // Clear any active thread
+        threadPanel.classList.remove('active');
+        activeThread = null;
+        document.querySelector('.main-content').style.marginRight = '0';
+      });
+
+      socket.on('privateMessage', (data) => {
+        // If we're not in the correct private room, don't show the message
+        if (!currentPrivateRoom || !currentPrivateRoom.includes(data.username)) {
+          return;
+        }
+        
+        appendMessage({
+          id: data.id,
+          text: data.text,
+          username: data.username,
+          timestamp: data.timestamp,
+          isPrivate: true
+        }, 'private');
+      });
+
+      socket.on('message', (messages) => {
+        if (Array.isArray(messages)) {
+          chatLog.innerHTML = '';
+          messages.reverse().forEach(msg => appendMessage(msg));
+        } else {
+          appendMessage(messages);
+        }
+      });
+
+      socket.on('updateChannels', (channels) => {
+        channelsList.innerHTML = '';
+        channels.forEach(channel => {
+          const li = document.createElement('li');
+          li.innerHTML = `<i class="bi bi-hash"></i>${channel}`;
+          li.onclick = () => joinChannel(channel);
+          if (currentChannel.textContent === '#' + channel) {
+            li.className = 'active';
+          }
+          channelsList.appendChild(li);
+        });
+      });
+
+      socket.on('updateUsers', (users) => {
+        onlineUsersList.innerHTML = '';
+        users.forEach(user => {
+          if (user !== currentUsername) {
+            const li = document.createElement('li');
+            li.innerHTML = `
+              <i class="bi bi-circle-fill" style="color: #2bac76; font-size: 8px;"></i>
+              ${user}
+            `;
+            li.onclick = () => openPrivateChat(user);
+            onlineUsersList.appendChild(li);
+          }
+        });
+      });
+
+      socket.on('updateReactions', ({ messageId, reactions }) => {
+        const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+        if (messageElement) {
+          const reactionsContainer = messageElement.querySelector('.message-reactions');
+          updateReactionsDisplay(reactionsContainer, reactions);
+        }
+      });
+
+      // Message handling
+      function appendMessage(data, type = 'normal') {
+        const target = type === 'thread' ? threadLog : chatLog;
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message';
+        if (type === 'private') {
+          messageDiv.classList.add('private-message');
+        }
+        messageDiv.setAttribute('data-message-id', data.id);
+        
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.textContent = data.username[0].toUpperCase();
+
+        const content = document.createElement('div');
+        content.className = 'message-content';
+        
+        const header = document.createElement('div');
+        header.className = 'message-header';
+        header.innerHTML = `
+          <strong>${data.username}</strong>
+          <small class="text-muted ms-2">${formatTimestamp(data.timestamp)}</small>
+          ${type === 'private' ? '<span class="badge bg-primary ms-2">Private</span>' : ''}
+          ${data.threadId ? '<span class="badge bg-secondary ms-2">Thread Reply</span>' : ''}
+        `;
+
+        const text = document.createElement('div');
+        text.className = 'message-text';
+        text.textContent = data.text;
+
+        const actions = document.createElement('div');
+        actions.className = 'message-actions';
+        
+        if (type !== 'private') {
+          actions.innerHTML = `
+            <button class="message-action" onclick="addReaction('${data.id}')">
+              <i class="bi bi-emoji-smile"></i> Add reaction
+            </button>
+            ${!data.threadId ? `
+              <button class="message-action" onclick="startThread('${data.id}')">
+                <i class="bi bi-chat-right-text"></i> Reply in thread
+              </button>
+            ` : ''}
+          `;
+        }
+
+        const reactions = document.createElement('div');
+        reactions.className = 'message-reactions';
+        if (type !== 'private' && data.reactions) {
+          updateReactionsDisplay(reactions, data.reactions);
+        }
+
+        content.appendChild(header);
+        content.appendChild(text);
+        content.appendChild(actions);
+        content.appendChild(reactions);
+
+        messageDiv.appendChild(avatar);
+        messageDiv.appendChild(content);
+        target.appendChild(messageDiv);
+        target.scrollTop = target.scrollHeight;
+      }
+
+      function updateReactionsDisplay(container, reactions) {
+        container.innerHTML = '';
+        Object.entries(reactions).forEach(([emoji, users]) => {
+          const reaction = document.createElement('div');
+          reaction.className = `reaction${users.includes(currentUsername) ? ' active' : ''}`;
+          reaction.innerHTML = `${emoji} ${users.length}`;
+          reaction.onclick = () => toggleReaction(container.closest('.message').dataset.messageId, emoji);
+          container.appendChild(reaction);
+        });
+      }
+
+      // Message input handlers
+      messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessageBtn.click();
+        }
       });
 
       sendMessageBtn.addEventListener('click', () => {
         const text = messageInput.value.trim();
-        if (!text || !currentRoom) return;
+        if (!text) return;
 
-        const msgObject = {
-          room: currentRoom,
-          username: currentUser?.username || 'Guest',
-          text
-        };
-
-        socket.emit('sendRoomMessage', msgObject);
-        messageInput.value = '';
-        sendMessageBtn.disabled = true;
-      });
-
-      // Channel joining
-      joinChannelBtn.addEventListener('click', () => {
-        const roomName = channelInput.value.trim();
-        if (!roomName) return;
-
-        socket.emit('joinRoom', roomName);
-        currentRoom = roomName;
-        currentChannelEl.textContent = `Current channel: ${roomName}`;
-        channelInput.value = '';
-        sendMessageBtn.disabled = !messageInput.value.trim();
-      });
-
-      // File upload handler
-      fileUploadForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        const fileInput = document.getElementById('fileInput');
-        const file = fileInput.files[0];
-        
-        if (!file) return;
-
-        const uploadButton = fileUploadForm.querySelector('button');
-        uploadButton.disabled = true;
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-          const response = await fetch('/upload', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${authToken}`
-            },
-            body: formData
+        if (currentPrivateRoom) {
+          // Send private message
+          socket.emit('sendPrivateMessage', {
+            room: currentPrivateRoom,
+            text,
+            targetUser: currentPrivateUser
           });
-
-          const data = await response.json();
-
-          if (response.ok) {
-            showStatus(uploadStatus, 'File uploaded successfully!', 'success');
-            
-            // Add file to list
-            const li = document.createElement('li');
-            li.className = 'list-group-item';
-            const link = document.createElement('a');
-            link.href = data.filePath;
-            link.textContent = data.filename;
-            link.target = '_blank';
-            li.appendChild(link);
-            filesList.appendChild(li);
-            
-            fileInput.value = '';
-          } else {
-            showStatus(uploadStatus, `Upload failed: ${data.error}`, 'danger');
-          }
-        } catch (err) {
-          showStatus(uploadStatus, `Upload error: ${err.message}`, 'danger');
-        } finally {
-          uploadButton.disabled = false;
-        }
-      });
-
-      // Message handlers
-      socket.on('roomMessage', (data) => {
-        appendMessage(`[${data.room}] ${data.username}: ${data.text}`);
-      });
-
-      socket.on('privateMessage', (data) => {
-        // If we have a private chat open with this sender, add to that
-        if (currentPrivateChat) {
-          appendPrivateMessage(`${data.sender}: ${data.text}`);
         } else {
-          // Otherwise add to main chat log
-          appendMessage(`[PM from ${data.sender}]: ${data.text}`);
-        }
-      });
-
-      // Online users handler
-      socket.on('onlineUsers', (usernames) => {
-        const onlineList = document.getElementById('onlineUsersList');
-        onlineList.innerHTML = '';
-        usernames.forEach((username) => {
-          const li = document.createElement('li');
-          li.className = 'list-group-item cursor-pointer';
-          li.textContent = username;
+          // Send channel message
+          const channelName = currentChannel.textContent.replace('#', '');
+          console.log('Sending message to channel:', channelName);
           
-          // Add click handler for private messaging
-          if (username !== currentUser?.username) {
-            li.style.cursor = 'pointer';
-            li.addEventListener('click', () => startPrivateMessage(username));
-          } else {
-            li.classList.add('bg-light');
-          }
-          
-          onlineList.appendChild(li);
-        });
+          socket.emit('message', {
+            text,
+            username: currentUsername,
+            channel: channelName,
+            timestamp: Date.now(),
+            id: Date.now().toString()
+          });
+        }
+        messageInput.value = '';
       });
 
-      // Private messaging handlers
-      const startPrivateMessageBtn = document.getElementById('startPrivateMessageBtn');
-      const privateMessageUser = document.getElementById('privateMessageUser');
-      const privateMessageStatus = document.getElementById('privateMessageStatus');
+      // Thread handling
+      let currentThreadParent = null;
 
-      privateMessageUser.addEventListener('input', () => {
-        startPrivateMessageBtn.disabled = !privateMessageUser.value.trim() || 
-                                        privateMessageUser.value.trim() === currentUser?.username;
-      });
-
-      // Private chat state
-      let currentPrivateChat = null;
-
-      function startPrivateMessage(targetUser) {
-        if (!currentUser) {
-          showStatus(privateMessageStatus, 'Please login first', 'danger');
-          return;
-        }
-
-        if (targetUser === currentUser.username) {
-          showStatus(privateMessageStatus, 'Cannot message yourself', 'warning');
-          return;
-        }
-
-        socket.emit('startPrivateMessage', { targetUser }, (response) => {
-          if (response.error) {
-            showStatus(privateMessageStatus, `Error: ${response.error}`, 'danger');
-          } else {
-            // Show private chat interface
-            document.getElementById('privateChatInterface').style.display = 'block';
-            document.getElementById('startPrivateChatInterface').style.display = 'none';
-            document.getElementById('privateChatHeader').textContent = `Chat with: ${targetUser}`;
-            document.getElementById('privateChatLog').innerHTML = ''; // Clear previous chat
-            
-            // Set current private chat state
-            currentPrivateChat = {
-              room: response.room,
-              targetUser: targetUser
-            };
-            
-            privateMessageUser.value = '';
-            startPrivateMessageBtn.disabled = true;
-          }
-        });
-      }
-
-      // Handle private chat interface
-      const privateChatLog = document.getElementById('privateChatLog');
-      const privateMessageInput = document.getElementById('privateMessageInput');
-      const sendPrivateMessageBtn = document.getElementById('sendPrivateMessageBtn');
-      const closePrivateChatBtn = document.getElementById('closePrivateChat');
-
-      sendPrivateMessageBtn.addEventListener('click', () => {
-        const text = privateMessageInput.value.trim();
-        if (!text || !currentPrivateChat) return;
-
-        socket.emit('sendPrivateMessage', {
-          room: currentPrivateChat.room,
-          text: text
-        });
+      function startThread(messageId) {
+        activeThread = messageId;
+        currentThreadParent = messageId;
+        threadPanel.classList.add('active');
+        threadLog.innerHTML = '';
         
-        // Add message to chat log immediately
-        appendPrivateMessage(`You: ${text}`);
-        privateMessageInput.value = '';
+        // Adjust main content width
+        document.querySelector('.main-content').style.marginRight = '400px';
+        
+        socket.emit('getThread', messageId);
+      }
+
+      closeThread.addEventListener('click', () => {
+        threadPanel.classList.remove('active');
+        activeThread = null;
+        currentThreadParent = null;
+        document.querySelector('.main-content').style.marginRight = '0';
       });
 
-      privateMessageInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-          sendPrivateMessageBtn.click();
+      // Add Enter key handling for thread input
+      threadInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendThreadBtn.click();
         }
       });
 
-      closePrivateChatBtn.addEventListener('click', () => {
-        document.getElementById('privateChatInterface').style.display = 'none';
-        document.getElementById('startPrivateChatInterface').style.display = 'block';
-        currentPrivateChat = null;
+      sendThreadBtn.addEventListener('click', () => {
+        const text = threadInput.value.trim();
+        if (!text || !activeThread) return;
+
+        socket.emit('message', {
+          text,
+          username: currentUsername,
+          threadId: activeThread,
+          timestamp: Date.now(),
+          id: Date.now().toString(),
+          channel: currentChannel.textContent.replace('#', '') // Add current channel
+        });
+        threadInput.value = '';
       });
 
-      function appendPrivateMessage(message) {
-        const p = document.createElement('p');
-        p.textContent = message;
-        p.className = 'mb-1';
-        privateChatLog.appendChild(p);
-        privateChatLog.scrollTop = privateChatLog.scrollHeight;
+      // Channel handling
+      addChannelBtn.addEventListener('click', () => {
+        addChannelModal.show();
+      });
+
+      addChannelForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const name = document.getElementById('channelName').value.trim();
+        const description = document.getElementById('channelDescription').value.trim();
+        
+        if (!name) {
+          alert('Channel name is required');
+          return;
+        }
+
+        // Validate channel name format
+        if (!name.match(/^[a-z0-9-_]+$/)) {
+          alert('Channel name can only contain lowercase letters, numbers, hyphens and underscores');
+          return;
+        }
+
+        socket.emit('createChannel', { name, description });
+        addChannelModal.hide();
+        addChannelForm.reset();
+      });
+
+      function joinChannel(channel) {
+        // Clear any active private chat
+        currentPrivateRoom = null;
+        currentPrivateUser = null;
+
+        // Clear any active thread
+        threadPanel.classList.remove('active');
+        activeThread = null;
+        document.querySelector('.main-content').style.marginRight = '0';
+
+        socket.emit('joinChannel', channel);
+        currentChannel.textContent = '#' + channel;
+        chatLog.innerHTML = '';
+        document.querySelectorAll('#channelsList li').forEach(li => {
+          li.className = li.textContent === '#' + channel ? 'active' : '';
+        });
       }
 
-      startPrivateMessageBtn.addEventListener('click', () => {
-        const targetUser = privateMessageUser.value.trim();
-        startPrivateMessage(targetUser);
+      // Reaction handling
+      function addReaction(messageId) {
+        const emojiPicker = document.createElement('emoji-picker');
+        emojiPicker.style.position = 'fixed';
+        emojiPicker.style.zIndex = '1000';
+        
+        const button = event.target.closest('.message-action');
+        const rect = button.getBoundingClientRect();
+        emojiPicker.style.left = rect.left + 'px';
+        emojiPicker.style.top = (rect.bottom + 8) + 'px';
+        
+        document.body.appendChild(emojiPicker);
+        
+        function handleSelection(e) {
+          const selectedEmoji = e.detail.unicode;
+          socket.emit('toggleReaction', { messageId, emoji: selectedEmoji });
+          emojiPicker.remove();
+          document.removeEventListener('click', handleClickOutside);
+        }
+        
+        function handleClickOutside(e) {
+          if (!emojiPicker.contains(e.target) && e.target !== button) {
+            emojiPicker.remove();
+            document.removeEventListener('click', handleClickOutside);
+          }
+        }
+        
+        emojiPicker.addEventListener('emoji-click', handleSelection);
+        setTimeout(() => document.addEventListener('click', handleClickOutside), 0);
+      }
+
+      function toggleReaction(messageId, emoji) {
+        socket.emit('toggleReaction', { messageId, emoji });
+      }
+
+      // Utility functions
+      function showMainInterface() {
+        document.getElementById('authContainer').style.display = 'none';
+        document.getElementById('mainInterface').style.display = 'block';
+      }
+
+      // Check for existing token on page load
+      const token = localStorage.getItem('token');
+      if (token) {
+        // TODO: Verify token and auto-login
+      }
+
+      // Emoji picker setup
+      const mainEmojiTrigger = document.getElementById('mainEmojiTrigger');
+      const threadEmojiTrigger = document.getElementById('threadEmojiTrigger');
+      const mainEmojiPicker = document.getElementById('mainEmojiPicker');
+      const threadEmojiPicker = document.getElementById('threadEmojiPicker');
+
+      // Function to handle emoji selection
+      function handleEmojiSelect(event, input) {
+        const emoji = event.detail.unicode;
+        const cursorPos = input.selectionStart;
+        const text = input.value;
+        input.value = text.slice(0, cursorPos) + emoji + text.slice(cursorPos);
+        input.focus();
+        input.selectionStart = cursorPos + emoji.length;
+        input.selectionEnd = cursorPos + emoji.length;
+      }
+
+      // Setup main message emoji picker
+      mainEmojiTrigger.addEventListener('click', () => {
+        const container = mainEmojiTrigger.closest('.emoji-picker-container');
+        container.classList.toggle('active');
+        // Close thread emoji picker if open
+        threadEmojiTrigger.closest('.emoji-picker-container').classList.remove('active');
       });
 
-      // New file notification handler
-      socket.on('newFile', (fileData) => {
-        appendMessage(`${fileData.uploader} uploaded: ${fileData.filename}`);
+      mainEmojiPicker.addEventListener('emoji-click', (event) => {
+        handleEmojiSelect(event, messageInput);
+        mainEmojiTrigger.closest('.emoji-picker-container').classList.remove('active');
       });
+
+      // Setup thread emoji picker
+      threadEmojiTrigger.addEventListener('click', () => {
+        const container = threadEmojiTrigger.closest('.emoji-picker-container');
+        container.classList.toggle('active');
+        // Close main emoji picker if open
+        mainEmojiTrigger.closest('.emoji-picker-container').classList.remove('active');
+      });
+
+      threadEmojiPicker.addEventListener('emoji-click', (event) => {
+        handleEmojiSelect(event, threadInput);
+        threadEmojiTrigger.closest('.emoji-picker-container').classList.remove('active');
+      });
+
+      // Close emoji pickers when clicking outside
+      document.addEventListener('click', (event) => {
+        if (!event.target.closest('.emoji-picker-container')) {
+          document.querySelectorAll('.emoji-picker-container').forEach(container => {
+            container.classList.remove('active');
+          });
+        }
+      });
+
+      // Function to open private chat
+      function openPrivateChat(targetUser) {
+        if (targetUser === currentUsername) return;
+        socket.emit('startPrivateMessage', { targetUser });
+      }
+
+      // Add these utility functions at the top
+      function formatTimestamp(timestamp) {
+        return new Date(timestamp).toLocaleTimeString();
+      }
+
+      // Add CSS for thread messages
+      const style = document.createElement('style');
+      style.textContent += `
+        .message .badge {
+          font-size: 0.75em;
+        }
+        .main-content {
+          transition: margin-right 0.3s ease;
+        }
+      `;
+      document.head.appendChild(style);
     </script>
   </body>
 </html>
+
 
 
 
