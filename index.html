@@ -812,94 +812,163 @@
         }
       });
 
-      socket.on('privateMessageStarted', (data) => {
-        const { room, user } = data;
-        currentPrivateRoom = room;
-        currentPrivateUser = user;
-        
-        // Update UI to show private chat
-        currentChannel.textContent = `@${user}`;
-        chatLog.innerHTML = '';
-        
-        // Update channel list UI
-        document.querySelectorAll('#channelsList li').forEach(li => {
-          li.className = '';
-        });
+      // Add chat context manager
+      const ChatContext = {
+        CHANNEL: 'channel',
+        PRIVATE: 'private'
+      };
 
-        // Add active class to the user in the DM list
-        document.querySelectorAll('#onlineUsersList li').forEach(li => {
-          if (li.textContent.includes(user)) {
-            li.className = 'active';
-          } else {
-            li.className = '';
+      const chatState = {
+        currentContext: null,
+        currentChannel: null,
+        currentPrivateRoom: null,
+        currentPrivateUser: null,
+        channelMessages: new Map(),
+        privateMessages: new Map(),
+
+        // Switch to channel context
+        switchToChannel(channelName) {
+          this.currentContext = ChatContext.CHANNEL;
+          this.currentChannel = channelName;
+          this.currentPrivateRoom = null;
+          this.currentPrivateUser = null;
+          
+          // Update UI
+          currentChannel.textContent = '#' + channelName;
+          
+          // Display cached messages if they exist
+          if (this.channelMessages.has(channelName)) {
+            chatLog.innerHTML = '';
+            this.channelMessages.get(channelName).forEach(msg => {
+              if (!msg.threadId) {  // Don't show thread messages in main chat
+                appendMessage(msg);
+              }
+            });
           }
-        });
+          
+          // Update sidebar active states
+          document.querySelectorAll('#channelsList li').forEach(li => {
+            li.className = li.textContent === '#' + channelName ? 'active' : '';
+          });
+          document.querySelectorAll('#onlineUsersList li').forEach(li => {
+            li.className = '';
+          });
+          
+          // Request latest messages to stay up to date
+          socket.emit('joinChannel', channelName);
+        },
 
-        // Clear any active thread
-        threadPanel.classList.remove('active');
-        activeThread = null;
-        document.querySelector('.main-content').style.marginRight = '0';
+        // Switch to private chat context
+        switchToPrivate(user, room) {
+          this.currentContext = ChatContext.PRIVATE;
+          this.currentPrivateUser = user;
+          this.currentPrivateRoom = room;
+          this.currentChannel = null;
+          
+          // Update UI
+          currentChannel.textContent = `@${user}`;
+          chatLog.innerHTML = '';
+          
+          // Display cached messages if they exist
+          if (this.privateMessages.has(room)) {
+            this.privateMessages.get(room).forEach(msg => appendMessage(msg, 'private'));
+          }
+          
+          // Update sidebar active states
+          document.querySelectorAll('#channelsList li').forEach(li => {
+            li.className = '';
+          });
+          document.querySelectorAll('#onlineUsersList li').forEach(li => {
+            if (li.textContent.includes(user)) {
+              li.className = 'active';
+            } else {
+              li.className = '';
+            }
+          });
+
+          // Clear any active thread
+          threadPanel.classList.remove('active');
+          activeThread = null;
+          document.querySelector('.main-content').style.marginRight = '0';
+        },
+
+        // Store message in appropriate cache
+        storeMessage(message, isPrivate = false) {
+          if (isPrivate && this.currentPrivateRoom) {
+            const messages = this.privateMessages.get(this.currentPrivateRoom) || [];
+            this.privateMessages.set(this.currentPrivateRoom, [...messages, message]);
+          } else if (!isPrivate && this.currentChannel) {
+            const messages = this.channelMessages.get(this.currentChannel) || [];
+            this.channelMessages.set(this.currentChannel, [...messages, message]);
+          }
+        },
+
+        // Store multiple messages
+        storeMessages(messages, isPrivate = false) {
+          if (isPrivate && this.currentPrivateRoom) {
+            this.privateMessages.set(this.currentPrivateRoom, messages);
+          } else if (!isPrivate && this.currentChannel) {
+            this.channelMessages.set(this.currentChannel, messages);
+          }
+        }
+      };
+
+      // Message handling with proper thread support
+      socket.on('message', (messages) => {
+        if (Array.isArray(messages)) {
+          // Only store and display messages if we're in a channel
+          if (chatState.currentContext === ChatContext.CHANNEL) {
+            chatState.storeMessages(messages);
+            chatLog.innerHTML = '';
+            messages.forEach(msg => {
+              if (!msg.threadId) {
+                appendMessage(msg);
+              }
+            });
+          }
+        } else {
+          // Handle single message
+          if (!messages.threadId || messages.threadId === activeThread) {
+            if (chatState.currentContext === ChatContext.CHANNEL) {
+              chatState.storeMessage(messages);
+            }
+            appendMessage(messages, messages.threadId ? 'thread' : 'normal');
+          }
+        }
       });
 
       socket.on('privateMessage', (data) => {
-        // If we're not in the correct private room, don't show the message
-        if (!currentPrivateRoom || !currentPrivateRoom.includes(data.username)) {
-          return;
+        // Only show message if we're in the correct private room
+        if (chatState.currentContext === ChatContext.PRIVATE && 
+            chatState.currentPrivateRoom && 
+            chatState.currentPrivateRoom.includes(data.username)) {
+          chatState.storeMessage(data, true);
+          appendMessage(data, 'private');
         }
+      });
+
+      socket.on('privateMessageStarted', (data) => {
+        const { room, user } = data;
+        chatState.switchToPrivate(user, room);
+      });
+
+      // Update channel joining function
+      function loadChannelMessages(channelName) {
+        chatState.switchToChannel(channelName);
+      }
+
+      // Update private chat function
+      function openPrivateChat(targetUser) {
+        if (targetUser === currentUsername) return;
         
-        appendMessage({
-          id: data.id,
-          text: data.text,
-          username: data.username,
-          timestamp: data.timestamp,
-          isPrivate: true
-        }, 'private');
-      });
-
-      socket.on('message', (messages) => {
-        if (Array.isArray(messages)) {
-          chatLog.innerHTML = '';
-          messages.reverse().forEach(msg => appendMessage(msg));
-        } else {
-          appendMessage(messages);
-        }
-      });
-
-      socket.on('updateChannels', (channels) => {
-        channelsList.innerHTML = '';
-        channels.forEach(channel => {
-          const li = document.createElement('li');
-          li.innerHTML = `<i class="bi bi-hash"></i>${channel}`;
-          li.onclick = () => joinChannel(channel);
-          if (currentChannel.textContent === '#' + channel) {
-            li.className = 'active';
-          }
-          channelsList.appendChild(li);
-        });
-      });
-
-      socket.on('updateUsers', (users) => {
-        onlineUsersList.innerHTML = '';
-        users.forEach(user => {
-          if (user !== currentUsername) {
-            const li = document.createElement('li');
-            li.innerHTML = `
-              <i class="bi bi-circle-fill" style="color: #2bac76; font-size: 8px;"></i>
-              ${user}
-            `;
-            li.onclick = () => openPrivateChat(user);
-            onlineUsersList.appendChild(li);
-          }
-        });
-      });
-
-      socket.on('updateReactions', ({ messageId, reactions }) => {
-        const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-        if (messageElement) {
-          const reactionsContainer = messageElement.querySelector('.message-reactions');
-          updateReactionsDisplay(reactionsContainer, reactions);
-        }
-      });
+        // Clear current view before switching
+        chatLog.innerHTML = '';
+        threadPanel.classList.remove('active');
+        activeThread = null;
+        document.querySelector('.main-content').style.marginRight = '0';
+        
+        socket.emit('startPrivateMessage', { targetUser });
+      }
 
       // Message handling
       function appendMessage(data, type = 'normal') {
@@ -1061,9 +1130,9 @@
             const formData = new FormData();
             formData.append('file', selectedFile);
             
-            if (currentPrivateRoom) {
-              formData.append('targetUser', currentPrivateUser);
-              formData.append('room', currentPrivateRoom);
+            if (chatState.currentPrivateRoom) {
+              formData.append('targetUser', chatState.currentPrivateUser);
+              formData.append('room', chatState.currentPrivateRoom);
               
               await fetch('/upload/private', {
                 method: 'POST',
@@ -1092,11 +1161,11 @@
 
           // Handle text message if there is text
           if (text) {
-            if (currentPrivateRoom) {
+            if (chatState.currentContext === ChatContext.PRIVATE) {
               socket.emit('sendPrivateMessage', {
                 text,
-                room: currentPrivateRoom,
-                targetUser: currentPrivateUser
+                targetUser: chatState.currentPrivateUser,
+                room: chatState.currentPrivateRoom
               });
             } else {
               socket.emit('message', {
@@ -1135,7 +1204,7 @@
         document.querySelector('.main-content').style.marginRight = '0';
       });
 
-      // Add Enter key handling for thread input
+      // Thread message input handling
       threadInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
@@ -1149,11 +1218,8 @@
 
         socket.emit('message', {
           text,
-          username: currentUsername,
           threadId: activeThread,
-          timestamp: Date.now(),
-          id: Date.now().toString(),
-          channel: currentChannel.textContent.replace('#', '') // Add current channel
+          channel: currentChannel.textContent.replace('#', '')
         });
         threadInput.value = '';
       });
@@ -1189,17 +1255,8 @@
         currentPrivateRoom = null;
         currentPrivateUser = null;
 
-        // Clear any active thread
-        threadPanel.classList.remove('active');
-        activeThread = null;
-        document.querySelector('.main-content').style.marginRight = '0';
-
-        socket.emit('joinChannel', channel);
-        currentChannel.textContent = '#' + channel;
-        chatLog.innerHTML = '';
-        document.querySelectorAll('#channelsList li').forEach(li => {
-          li.className = li.textContent === '#' + channel ? 'active' : '';
-        });
+        // Load channel messages
+        loadChannelMessages(channel);
       }
 
       // Reaction handling
@@ -1530,6 +1587,56 @@
         
         return messageDiv;
       }
+
+      // Restore channel list updates
+      socket.on('updateChannels', (channels) => {
+        channelsList.innerHTML = '';
+        channels.forEach(channel => {
+          const li = document.createElement('li');
+          li.innerHTML = `<i class="bi bi-hash"></i>${channel}`;
+          li.onclick = () => loadChannelMessages(channel);
+          if (chatState.currentChannel === channel) {
+            li.className = 'active';
+          }
+          channelsList.appendChild(li);
+        });
+      });
+
+      // Restore online users list updates
+      socket.on('updateUsers', (users) => {
+        onlineUsersList.innerHTML = '';
+        users.forEach(user => {
+          if (user !== currentUsername) {
+            const li = document.createElement('li');
+            li.innerHTML = `
+              <i class="bi bi-circle-fill" style="color: #2bac76; font-size: 8px;"></i>
+              ${user}
+            `;
+            li.onclick = () => openPrivateChat(user);
+            if (chatState.currentPrivateUser === user) {
+              li.className = 'active';
+            }
+            onlineUsersList.appendChild(li);
+          }
+        });
+      });
+
+      // Restore reactions update handler
+      socket.on('updateReactions', ({ messageId, reactions }) => {
+        const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+        if (messageElement) {
+          const reactionsContainer = messageElement.querySelector('.message-reactions');
+          updateReactionsDisplay(reactionsContainer, reactions);
+        }
+      });
+
+      // Restore thread message handling
+      socket.on('threadMessages', ({ threadId, messages }) => {
+        if (activeThread === threadId) {
+          threadLog.innerHTML = '';
+          messages.forEach(msg => appendMessage(msg, 'thread'));
+        }
+      });
     </script>
   </body>
 </html>
