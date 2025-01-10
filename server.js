@@ -65,6 +65,10 @@ const Message = sequelize.define('Message', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  fileData: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  }
 });
 
 const Reaction = sequelize.define('Reaction', {
@@ -133,9 +137,47 @@ const JWT_SECRET = 'my_super_secret_key';
 
 // Ensure "uploads" folder exists
 if (!fs.existsSync('uploads')) {
-  fs.mkdirSync('uploads');
+  fs.mkdirSync('uploads', { mode: 0o755 });
 }
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Map file extensions to MIME types
+const MIME_TYPES = {
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.txt': 'text/plain',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.zip': 'application/zip'
+};
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  setHeaders: (res, filePath) => {
+    // Get file extension
+    const ext = path.extname(filePath).toLowerCase();
+    
+    // Set content type based on file extension
+    if (MIME_TYPES[ext]) {
+      res.setHeader('Content-Type', MIME_TYPES[ext]);
+    }
+    
+    // For PDFs and images, display inline
+    if (ext === '.pdf' || ext === '.jpg' || ext === '.jpeg' || ext === '.png' || ext === '.gif') {
+      res.setHeader('Content-Disposition', 'inline');
+    } else {
+      res.setHeader('Content-Disposition', `attachment; filename="${path.basename(filePath)}"`);
+    }
+    
+    // Remove any restrictive headers
+    res.removeHeader('X-Content-Type-Options');
+    res.removeHeader('Content-Security-Policy');
+  }
+}));
 
 // -------------------
 //  Multer Setup
@@ -145,18 +187,46 @@ const storage = multer.diskStorage({
     cb(null, 'uploads/'); 
   },
   filename: (req, file, cb) => {
+    // Sanitize filename and add timestamp to prevent overwriting
     const sanitizedFilename = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '');
     cb(null, `${Date.now()}-${sanitizedFilename}`);
   },
 });
+
+// Define allowed file types
+const ALLOWED_MIME_TYPES = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'application/pdf': 'pdf',
+  'text/plain': 'txt',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/zip': 'zip',
+  'application/x-zip-compressed': 'zip'
+};
+
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { 
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+    files: 1 // Only allow one file per request
+  },
   fileFilter: (req, file, cb) => {
-    // Allow only images or PDFs
-    if (!file.mimetype.match(/^(image\/|application\/pdf)/)) {
-      return cb(new Error('Invalid file type'), false);
+    // Check if mime type is allowed
+    const extension = ALLOWED_MIME_TYPES[file.mimetype];
+    if (!extension) {
+      return cb(new Error('Invalid file type. Only images, PDFs, Office documents, text files, and zip files are allowed.'), false);
     }
+
+    // Verify file extension matches mime type
+    const fileExtension = file.originalname.toLowerCase().split('.').pop();
+    if (fileExtension !== extension && !(fileExtension === 'jpeg' && extension === 'jpg')) {
+      return cb(new Error('File extension does not match its content.'), false);
+    }
+
     cb(null, true);
   },
 });
@@ -269,31 +339,157 @@ app.get('/channels', authenticateToken, async (req, res) => {
   }
 });
 
+// Channel membership middleware
+async function verifyChannelMembership(req, res, next) {
+  try {
+    const channelName = req.body.channel;
+    if (!channelName) {
+      return res.status(400).json({ error: 'No channel specified' });
+    }
+
+    // Find the channel
+    const channel = await Channel.findOne({ where: { name: channelName } });
+    if (!channel) {
+      return res.status(404).json({ error: 'Channel not found' });
+    }
+
+    // Get socket instance for the user
+    const socketId = usernameToSocketId.get(req.user.username);
+    if (!socketId) {
+      return res.status(403).json({ error: 'Not connected to chat' });
+    }
+
+    const socket = io.sockets.sockets.get(socketId);
+    if (!socket || !socket.rooms.has(channelName)) {
+      return res.status(403).json({ error: 'Not a member of this channel' });
+    }
+
+    // Add channel to request for later use
+    req.channel = channel;
+    next();
+  } catch (err) {
+    console.error('Channel membership verification error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
 // -------------------
-//  File Upload
+//  File Upload Routes
 // -------------------
-app.post('/upload', authenticateToken, upload.single('file'), (req, res) => {
+
+// Channel file upload
+app.post('/upload/channel', authenticateToken, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
+    const { channelName } = req.body;
+    if (!channelName) {
+      return res.status(400).json({ error: 'Channel name is required' });
+    }
+
+    const channel = await Channel.findOne({ where: { name: channelName } });
+    if (!channel) {
+      return res.status(400).json({ error: 'Channel not found' });
+    }
+
+    // Store the actual filename that was saved
     const fileData = {
-      filename: req.file.filename,
-      filePath: `/uploads/${req.file.filename}`,
+      filename: req.file.filename, // This is the saved filename (with timestamp)
+      originalName: req.file.originalname,
+      filePath: `/uploads/${req.file.filename}`, // Use the saved filename in the path
       uploader: req.user.username,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+      timestamp: new Date()
     };
 
-    // Broadcast to all connected clients if you want
-    io.emit('newFile', fileData);
+    // Create message for the file
+    const user = await User.findOne({ where: { username: req.user.username } });
+    const message = await Message.create({
+      text: `Shared a file: ${req.file.originalname}`,
+      UserId: user.id,
+      ChannelId: channel.id,
+      fileData: JSON.stringify(fileData)
+    });
+
+    // Log the file data being sent
+    console.log('File upload successful:', {
+      savedPath: req.file.path,
+      fileData: fileData,
+      url: `${req.protocol}://${req.get('host')}${fileData.filePath}`
+    });
+
+    // Broadcast to channel
+    io.to(channelName).emit('message', {
+      id: message.id,
+      text: message.text,
+      username: req.user.username,
+      timestamp: message.createdAt,
+      fileData: fileData,
+      reactions: {}
+    });
 
     res.status(200).json({
       message: 'File uploaded successfully',
-      filename: fileData.filename,
-      filePath: fileData.filePath,
+      fileData
     });
   } catch (err) {
     console.error('File upload error:', err);
+    if (req.file) {
+      fs.unlink(req.file.path, (unlinkErr) => {
+        if (unlinkErr) console.error('Error deleting file:', unlinkErr);
+      });
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Private message file upload
+app.post('/upload/private', authenticateToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const { targetUser, room } = req.body;
+    if (!targetUser || !room || !room.startsWith('private:')) {
+      return res.status(400).json({ error: 'Invalid private message details' });
+    }
+
+    const fileData = {
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      filePath: `/uploads/${req.file.filename}`,
+      uploader: req.user.username,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+      timestamp: new Date()
+    };
+
+    // Send file data to private room
+    io.to(room).emit('privateMessage', {
+      id: Date.now().toString(),
+      text: `Shared a file: ${req.file.originalname}`,
+      username: req.user.username,
+      timestamp: new Date(),
+      isPrivate: true,
+      targetUser,
+      fileData
+    });
+
+    res.status(200).json({
+      message: 'File shared successfully',
+      fileData
+    });
+  } catch (err) {
+    console.error('Private file share error:', err);
+    if (req.file) {
+      fs.unlink(req.file.path, (unlinkErr) => {
+        if (unlinkErr) console.error('Error deleting file:', unlinkErr);
+      });
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });

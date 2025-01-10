@@ -265,23 +265,90 @@
 
       /* Message input area */
       .message-input-container {
-        padding: 16px 24px 24px;
+        padding: 20px;
         border-top: 1px solid var(--slack-border);
         background: white;
       }
 
-      .message-input {
+      .message-input-wrapper {
         border: 1px solid var(--slack-border);
         border-radius: 4px;
-        min-height: 44px;
-        padding: 9px 12px;
-        font-size: 15px;
-        line-height: 1.46668;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
       }
 
-      .message-input:focus {
-        border-color: var(--slack-channel);
-        box-shadow: 0 0 0 1px var(--slack-channel);
+      .message-input-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px;
+      }
+
+      .file-upload-btn {
+        background: none;
+        border: none;
+        color: #616061;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .file-upload-btn:hover {
+        background: #f8f9fa;
+      }
+
+      .file-upload-input {
+        display: none;
+      }
+
+      .file-preview {
+        padding: 8px;
+        margin-top: 8px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        display: none;
+      }
+
+      .file-preview.active {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .file-preview-name {
+        font-size: 14px;
+        color: var(--slack-text);
+      }
+
+      .file-preview-remove {
+        background: none;
+        border: none;
+        color: #616061;
+        cursor: pointer;
+        padding: 4px;
+      }
+
+      .file-message {
+        background: #f8f9fa;
+        padding: 8px;
+        border-radius: 4px;
+        margin-top: 4px;
+      }
+
+      .file-message-link {
+        color: var(--slack-channel);
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .file-message-link:hover {
+        text-decoration: underline;
       }
 
       /* Thread Panel */
@@ -521,6 +588,19 @@
         <div class="message-input-container">
           <div class="message-input-group">
             <div class="message-input-wrapper">
+              <div class="message-input-actions">
+                <button class="file-upload-btn" onclick="document.getElementById('fileInput').click()">
+                  <i class="bi bi-paperclip"></i>
+                  Add file
+                </button>
+                <input type="file" id="fileInput" class="file-upload-input" />
+              </div>
+              <div class="file-preview">
+                <span class="file-preview-name"></span>
+                <button class="file-preview-remove">
+                  <i class="bi bi-x"></i>
+                </button>
+              </div>
               <div class="input-group">
                 <input
                   id="messageInput"
@@ -841,7 +921,7 @@
         const header = document.createElement('div');
         header.className = 'message-header';
         header.innerHTML = `
-          <strong>${data.username}</strong>
+          <strong>${escapeHtml(data.username)}</strong>
           <small class="text-muted ms-2">${formatTimestamp(data.timestamp)}</small>
           ${type === 'private' ? '<span class="badge bg-primary ms-2">Private</span>' : ''}
           ${data.threadId ? '<span class="badge bg-secondary ms-2">Thread Reply</span>' : ''}
@@ -850,6 +930,76 @@
         const text = document.createElement('div');
         text.className = 'message-text';
         text.textContent = data.text;
+
+        content.appendChild(header);
+        content.appendChild(text);
+
+        // Add file attachment if present
+        if (data.fileData) {
+          const fileMessage = document.createElement('div');
+          fileMessage.className = 'file-message';
+          
+          const fileLink = document.createElement('a');
+          // Make sure we use the full URL with leading slash
+          fileLink.href = window.location.origin + (data.fileData.filePath.startsWith('/') ? '' : '/') + data.fileData.filePath;
+          fileLink.className = 'file-message-link';
+          
+          // For PDFs and images, open in new tab
+          if (data.fileData.mimetype.startsWith('image/') || 
+              data.fileData.mimetype === 'application/pdf') {
+            fileLink.target = '_blank';
+            fileLink.rel = 'noopener noreferrer';
+          } else {
+            // For other files, force download
+            fileLink.download = data.fileData.originalName;
+          }
+          
+          // Add click handler for tracking
+          fileLink.addEventListener('click', (e) => {
+            console.log('File clicked:', {
+              href: fileLink.href,
+              mimetype: data.fileData.mimetype,
+              filename: data.fileData.originalName
+            });
+          });
+          
+          // Choose icon based on file type
+          const fileIcon = document.createElement('i');
+          if (data.fileData.mimetype.startsWith('image/')) {
+            fileIcon.className = 'bi bi-file-image';
+          } else if (data.fileData.mimetype === 'application/pdf') {
+            fileIcon.className = 'bi bi-file-pdf';
+          } else if (data.fileData.mimetype.includes('spreadsheet')) {
+            fileIcon.className = 'bi bi-file-excel';
+          } else if (data.fileData.mimetype.includes('document')) {
+            fileIcon.className = 'bi bi-file-word';
+          } else {
+            fileIcon.className = 'bi bi-file-earmark';
+          }
+          
+          const fileName = document.createElement('span');
+          fileName.textContent = data.fileData.originalName;
+          
+          // Add file size if available
+          if (data.fileData.size) {
+            const fileSize = document.createElement('small');
+            fileSize.className = 'text-muted ms-2';
+            fileSize.textContent = formatFileSize(data.fileData.size);
+            fileName.appendChild(fileSize);
+          }
+          
+          fileLink.appendChild(fileIcon);
+          fileLink.appendChild(fileName);
+          fileMessage.appendChild(fileLink);
+          content.appendChild(fileMessage);
+          
+          // Add debug info
+          console.log('File message created:', {
+            url: fileLink.href,
+            mimetype: data.fileData.mimetype,
+            filename: data.fileData.originalName
+          });
+        }
 
         const actions = document.createElement('div');
         actions.className = 'message-actions';
@@ -873,8 +1023,6 @@
           updateReactionsDisplay(reactions, data.reactions);
         }
 
-        content.appendChild(header);
-        content.appendChild(text);
         content.appendChild(actions);
         content.appendChild(reactions);
 
@@ -903,31 +1051,66 @@
         }
       });
 
-      sendMessageBtn.addEventListener('click', () => {
+      sendMessageBtn.addEventListener('click', async () => {
         const text = messageInput.value.trim();
-        if (!text) return;
+        if (!currentUsername || (!text && !selectedFile)) return;
 
-        if (currentPrivateRoom) {
-          // Send private message
-          socket.emit('sendPrivateMessage', {
-            room: currentPrivateRoom,
-            text,
-            targetUser: currentPrivateUser
-          });
-        } else {
-          // Send channel message
-          const channelName = currentChannel.textContent.replace('#', '');
-          console.log('Sending message to channel:', channelName);
-          
-          socket.emit('message', {
-            text,
-            username: currentUsername,
-            channel: channelName,
-            timestamp: Date.now(),
-            id: Date.now().toString()
-          });
+        try {
+          // Handle file upload if a file is selected
+          if (selectedFile) {
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            
+            if (currentPrivateRoom) {
+              formData.append('targetUser', currentPrivateUser);
+              formData.append('room', currentPrivateRoom);
+              
+              await fetch('/upload/private', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                },
+                body: formData
+              });
+            } else {
+              formData.append('channelName', currentChannel.textContent.replace('#', ''));
+              
+              await fetch('/upload/channel', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                },
+                body: formData
+              });
+            }
+
+            // Clear file selection
+            selectedFile = null;
+            document.getElementById('fileInput').value = '';
+            document.querySelector('.file-preview').classList.remove('active');
+          }
+
+          // Handle text message if there is text
+          if (text) {
+            if (currentPrivateRoom) {
+              socket.emit('sendPrivateMessage', {
+                text,
+                room: currentPrivateRoom,
+                targetUser: currentPrivateUser
+              });
+            } else {
+              socket.emit('message', {
+                text,
+                channel: currentChannel.textContent.replace('#', ''),
+                threadId: activeThread
+              });
+            }
+            messageInput.value = '';
+          }
+        } catch (err) {
+          console.error('Error sending message:', err);
+          alert('Failed to send message');
         }
-        messageInput.value = '';
       });
 
       // Thread handling
@@ -1129,6 +1312,20 @@
         return new Date(timestamp).toLocaleTimeString();
       }
 
+      function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
       // Add CSS for thread messages
       const style = document.createElement('style');
       style.textContent += `
@@ -1140,6 +1337,199 @@
         }
       `;
       document.head.appendChild(style);
+
+      // Add this after socket initialization
+      let selectedFile = null;
+
+      // File upload handling
+      document.getElementById('fileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        selectedFile = file;
+        const preview = document.querySelector('.file-preview');
+        const previewName = preview.querySelector('.file-preview-name');
+        
+        previewName.textContent = file.name;
+        preview.classList.add('active');
+      });
+
+      document.querySelector('.file-preview-remove').addEventListener('click', function() {
+        selectedFile = null;
+        document.getElementById('fileInput').value = '';
+        document.querySelector('.file-preview').classList.remove('active');
+      });
+
+      // Modify the sendMessage function to handle file uploads
+      async function sendMessage(text) {
+        if (!currentUser || (!text && !selectedFile)) return;
+
+        try {
+          if (selectedFile) {
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            
+            if (currentPrivateChat) {
+              formData.append('targetUser', currentPrivateChat.user);
+              formData.append('room', currentPrivateChat.room);
+              
+              await fetch('/upload/private', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${authToken}`
+                },
+                body: formData
+              });
+            } else {
+              formData.append('channelName', currentChannel);
+              
+              await fetch('/upload/channel', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${authToken}`
+                },
+                body: formData
+              });
+            }
+
+            // Clear file selection
+            selectedFile = null;
+            document.getElementById('fileInput').value = '';
+            document.querySelector('.file-preview').classList.remove('active');
+          }
+
+          if (text) {
+            if (currentPrivateChat) {
+              socket.emit('sendPrivateMessage', {
+                text,
+                room: currentPrivateChat.room,
+                targetUser: currentPrivateChat.user
+              });
+            } else {
+              socket.emit('message', {
+                text,
+                channel: currentChannel,
+                threadId: currentThreadId
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Error sending message:', err);
+          showError('Failed to send message');
+        }
+      }
+
+      // Modify the displayMessage function to handle file attachments
+      function displayMessage(message) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message';
+        
+        // Create avatar
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.textContent = message.username[0].toUpperCase();
+        
+        // Create message content
+        const content = document.createElement('div');
+        content.className = 'message-content';
+        
+        const header = document.createElement('div');
+        header.className = 'message-header';
+        header.innerHTML = `<strong>${escapeHtml(message.username)}</strong> <span class="text-muted">${formatTimestamp(message.timestamp)}</span>`;
+        
+        const text = document.createElement('div');
+        text.className = 'message-text';
+        text.textContent = message.text;
+
+        content.appendChild(header);
+        content.appendChild(text);
+
+        // Add file attachment if present
+        if (message.fileData) {
+          const fileMessage = document.createElement('div');
+          fileMessage.className = 'file-message';
+          
+          const fileLink = document.createElement('a');
+          // Make sure we use the full URL with leading slash
+          fileLink.href = window.location.origin + (message.fileData.filePath.startsWith('/') ? '' : '/') + message.fileData.filePath;
+          fileLink.className = 'file-message-link';
+          
+          // For PDFs and images, open in new tab
+          if (message.fileData.mimetype.startsWith('image/') || 
+              message.fileData.mimetype === 'application/pdf') {
+            fileLink.target = '_blank';
+            fileLink.rel = 'noopener noreferrer';
+          } else {
+            // For other files, force download
+            fileLink.download = message.fileData.originalName;
+          }
+          
+          // Add click handler for tracking
+          fileLink.addEventListener('click', (e) => {
+            console.log('File clicked:', {
+              href: fileLink.href,
+              mimetype: message.fileData.mimetype,
+              filename: message.fileData.originalName
+            });
+          });
+          
+          // Choose icon based on file type
+          const fileIcon = document.createElement('i');
+          if (message.fileData.mimetype.startsWith('image/')) {
+            fileIcon.className = 'bi bi-file-image';
+          } else if (message.fileData.mimetype === 'application/pdf') {
+            fileIcon.className = 'bi bi-file-pdf';
+          } else if (message.fileData.mimetype.includes('spreadsheet')) {
+            fileIcon.className = 'bi bi-file-excel';
+          } else if (message.fileData.mimetype.includes('document')) {
+            fileIcon.className = 'bi bi-file-word';
+          } else {
+            fileIcon.className = 'bi bi-file-earmark';
+          }
+          
+          const fileName = document.createElement('span');
+          fileName.textContent = message.fileData.originalName;
+          
+          // Add file size if available
+          if (message.fileData.size) {
+            const fileSize = document.createElement('small');
+            fileSize.className = 'text-muted ms-2';
+            fileSize.textContent = formatFileSize(message.fileData.size);
+            fileName.appendChild(fileSize);
+          }
+          
+          fileLink.appendChild(fileIcon);
+          fileLink.appendChild(fileName);
+          fileMessage.appendChild(fileLink);
+          content.appendChild(fileMessage);
+          
+          // Add debug info
+          console.log('File message created:', {
+            url: fileLink.href,
+            mimetype: message.fileData.mimetype,
+            filename: message.fileData.originalName
+          });
+        }
+
+        // Add reactions container
+        const reactionsDiv = document.createElement('div');
+        reactionsDiv.className = 'message-reactions';
+        if (message.reactions) {
+          for (const [emoji, users] of Object.entries(message.reactions)) {
+            const reaction = document.createElement('div');
+            reaction.className = 'reaction';
+            reaction.textContent = `${emoji} ${users.length}`;
+            reaction.onclick = () => socket.emit('toggleReaction', { messageId: message.id, emoji });
+            reactionsDiv.appendChild(reaction);
+          }
+        }
+        content.appendChild(reactionsDiv);
+
+        messageDiv.appendChild(avatar);
+        messageDiv.appendChild(content);
+        
+        return messageDiv;
+      }
     </script>
   </body>
 </html>
